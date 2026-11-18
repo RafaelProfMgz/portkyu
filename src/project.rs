@@ -128,10 +128,9 @@ fn inspect(d: &Path) -> Option<Project> {
         (dirname, stack, "Python")
     } else if read("pubspec.yaml").is_some() {
         (dirname, None, "Flutter")
-    } else if let Some(s) = read("composer.json") {
-        (dirname, s.contains("laravel/framework").then(|| "Laravel".to_string()), "PHP")
     } else {
-        return None;
+        let s = read("composer.json")?;
+        (dirname, s.contains("laravel/framework").then(|| "Laravel".to_string()), "PHP")
     };
 
     Some(Project { root: d.to_path_buf(), name, stack, lang, branch: git_branch(d) })
