@@ -95,7 +95,10 @@ fn inspect(d: &Path) -> Option<Project> {
             .and_then(|l| l.split('"').nth(1))
             .unwrap_or(&dirname)
             .to_string();
-        let stack = find_in(&s, &[("axum", "Axum"), ("actix-web", "Actix"), ("rocket", "Rocket"), ("leptos", "Leptos"), ("tauri", "Tauri")]);
+        let stack = find_in(
+            &s,
+            &[("axum", "Axum"), ("actix-web", "Actix"), ("rocket", "Rocket"), ("leptos", "Leptos"), ("tauri", "Tauri")],
+        );
         (name, stack, "Rust")
     } else if let Some(s) = read("go.mod") {
         let name = s
@@ -105,12 +108,23 @@ fn inspect(d: &Path) -> Option<Project> {
             .and_then(|m| m.rsplit('/').next())
             .unwrap_or(&dirname)
             .to_string();
-        let stack = find_in(&s, &[("gin-gonic", "Gin"), ("labstack/echo", "Echo"), ("gofiber", "Fiber"), ("go-chi", "Chi")]);
+        let stack =
+            find_in(&s, &[("gin-gonic", "Gin"), ("labstack/echo", "Echo"), ("gofiber", "Fiber"), ("go-chi", "Chi")]);
         (name, stack, "Go")
     } else if let Some(s) = read("mix.exs") {
         (dirname, s.contains(":phoenix").then(|| "Phoenix".to_string()), "Elixir")
     } else if let Some(s) = read("pyproject.toml").or_else(|| read("requirements.txt")) {
-        let stack = find_in(&s, &[("fastapi", "FastAPI"), ("django", "Django"), ("flask", "Flask"), ("streamlit", "Streamlit"), ("langchain", "LangChain"), ("uvicorn", "ASGI")]);
+        let stack = find_in(
+            &s,
+            &[
+                ("fastapi", "FastAPI"),
+                ("django", "Django"),
+                ("flask", "Flask"),
+                ("streamlit", "Streamlit"),
+                ("langchain", "LangChain"),
+                ("uvicorn", "ASGI"),
+            ],
+        );
         (dirname, stack, "Python")
     } else if read("pubspec.yaml").is_some() {
         (dirname, None, "Flutter")

@@ -22,12 +22,13 @@ uso:
   portkyu --tui      versão de terminal (útil com sudo ou via ssh)
   portkyu -l         lista uma vez e sai (bom para pipe/grep)
   portkyu -u         inclui portas UDP
+  portkyu --demo     dados fictícios (capturas de tela, testar a interface)
   portkyu --admin    abre um terminal com a versão de terminal como root (sudo)
   sudo portkyu --tui mostra processos de root e as regras exatas do ufw";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let (mut udp, mut list, mut tui, mut port, mut snapshot) = (false, false, false, None, None);
+    let (mut udp, mut list, mut tui, mut port, mut snapshot, mut demo) = (false, false, false, None, None, false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -38,6 +39,7 @@ fn main() {
             "-u" | "--udp" => udp = true,
             "-l" | "--list" => list = true,
             "--tui" | "-t" => tui = true,
+            "--demo" => demo = true,
             "--admin" => {
                 let exe = app::self_exe();
                 if !app::open_in_terminal(None, "PortKyu — root", &["sudo", &exe, "--tui"]) {
@@ -60,6 +62,7 @@ fn main() {
     }
 
     let mut app = App::new(udp, port);
+    app.demo = demo;
     app.refresh();
 
     if list {
@@ -86,7 +89,11 @@ fn print_list(app: &App) {
     use std::io::Write;
     // escreve com tratamento de erro: `portkyu -l | head` fecha o pipe e não deve gerar panic
     let mut out = std::io::stdout().lock();
-    let _ = writeln!(out, "{:<5} {:<6} {:<24} {:<20} {:<6} {:<11} PROJETO", "PROTO", "PORTA", "SERVIÇO", "STACK", "CONEX", "ACESSO");
+    let _ = writeln!(
+        out,
+        "{:<5} {:<6} {:<24} {:<20} {:<6} {:<11} PROJETO",
+        "PROTO", "PORTA", "SERVIÇO", "STACK", "CONEX", "ACESSO"
+    );
     for e in &app.rows {
         let (_, short, _) = ui::exposure_badge(e.exposure);
         let dir = e

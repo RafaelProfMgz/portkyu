@@ -3249,11 +3249,12 @@ dependencies = [
 
 [[package]]
 name = "portkyu"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "eframe",
  "egui_extras",
+ "image",
  "libc",
  "procfs",
  "ratatui",

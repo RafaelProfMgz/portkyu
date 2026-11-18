@@ -1,5 +1,21 @@
 # Changelog
 
+Todas as mudanças relevantes do projeto. Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
+
+## Não lançado
+
+## v1.0.1 — 2026-11-18
+
+### Adicionado
+- Modo demonstração (`--demo`) com dados fictícios, para conhecer a interface e tirar capturas.
+- `PORTKYU_SCREENSHOT=arquivo.png` salva uma captura da janela automaticamente.
+- Guia de contribuição, código de conduta, política de segurança, modelos de issue e PR, README em inglês.
+- CI com `cargo fmt --check` e `cargo clippy -D warnings`.
+
+### Corrigido
+- `portkyu -l | head` não gera mais panic de "broken pipe".
+- A tabela não rola sozinha ao abrir, escondendo a primeira linha.
+
 ## v1.0.0 — 2026-11-18
 
 Primeira versão.

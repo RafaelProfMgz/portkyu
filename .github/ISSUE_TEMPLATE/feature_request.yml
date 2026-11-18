@@ -1,0 +1,28 @@
+name: 💡 Sugerir ideia / Feature request
+description: Uma ideia para deixar o PortKyu mais útil
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema isso resolve?
+      description: Conte a situação do seu dia a dia em que sentiu falta disso.
+      placeholder: Quando eu rodo vários microsserviços, eu queria…
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Como você imagina a solução?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas que você considerou
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribuição
+      options:
+        - label: Eu gostaria de implementar isso (com ajuda, se precisar)

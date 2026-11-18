@@ -10,14 +10,7 @@ use std::time::{Duration, Instant};
 #[derive(Clone, Debug)]
 pub enum Probe {
     Pending,
-    Http {
-        status: u16,
-        reason: String,
-        ms: u128,
-        ctype: Option<String>,
-        server: Option<String>,
-        title: Option<String>,
-    },
+    Http { status: u16, reason: String, ms: u128, ctype: Option<String>, server: Option<String>, title: Option<String> },
     NotHttp,
     Closed,
 }
@@ -53,6 +46,11 @@ impl Prober {
         let _ = self.tx.send(port);
     }
 
+    /// Define um resultado sem testar (modo demonstração).
+    pub fn set(&self, port: u16, p: Probe) {
+        self.results.lock().unwrap().insert(port, (Instant::now(), p));
+    }
+
     pub fn get(&self, port: u16) -> Option<(Instant, Probe)> {
         self.results.lock().unwrap().get(&port).cloned()
     }
@@ -61,9 +59,7 @@ impl Prober {
 fn probe(port: u16) -> Probe {
     let start = Instant::now();
     let targets = [SocketAddr::from((Ipv4Addr::LOCALHOST, port)), SocketAddr::from((Ipv6Addr::LOCALHOST, port))];
-    let Some(mut s) = targets
-        .iter()
-        .find_map(|t| TcpStream::connect_timeout(t, Duration::from_millis(700)).ok())
+    let Some(mut s) = targets.iter().find_map(|t| TcpStream::connect_timeout(t, Duration::from_millis(700)).ok())
     else {
         return Probe::Closed;
     };

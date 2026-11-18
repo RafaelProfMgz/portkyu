@@ -1,0 +1,65 @@
+name: 🐛 Relatar bug / Bug report
+description: Algo não funciona como deveria
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por relatar! Quanto mais detalhes, mais rápido conseguimos corrigir.
+        *English is fine too.*
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o problema e o que você esperava que acontecesse.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Rodei `portkyu` com um `pnpm dev` na porta 3000
+        2. Cliquei em …
+        3. Vi …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      description: Saída de `portkyu --version`
+      placeholder: portkyu 1.0.1
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Como instalou
+      options:
+        - AppImage
+        - install.sh (release)
+        - Compilado do código-fonte
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribuição e ambiente gráfico
+      placeholder: Ubuntu 24.04, KDE Plasma 6 (Wayland)
+    validations:
+      required: true
+  - type: dropdown
+    id: ui
+    attributes:
+      label: Interface
+      options:
+        - Gráfica
+        - Terminal (--tui)
+        - Lista (-l)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Saída do terminal / capturas
+      description: Rode `portkyu` pelo terminal e cole o que aparecer. Capturas de tela ajudam muito (cuidado com dados sensíveis).
+      render: shell

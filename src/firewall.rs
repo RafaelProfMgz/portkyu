@@ -31,11 +31,7 @@ pub fn load() -> Firewall {
         .unwrap_or(false);
     let drop_by_default = fs::read_to_string("/etc/default/ufw")
         .ok()
-        .and_then(|s| {
-            s.lines()
-                .find(|l| l.starts_with("DEFAULT_INPUT_POLICY"))
-                .map(|l| !l.contains("ACCEPT"))
-        })
+        .and_then(|s| s.lines().find(|l| l.starts_with("DEFAULT_INPUT_POLICY")).map(|l| !l.contains("ACCEPT")))
         .unwrap_or(true);
     let mut rules = Vec::new();
     let mut readable = true;

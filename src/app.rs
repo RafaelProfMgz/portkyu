@@ -137,6 +137,9 @@ pub struct App {
     pub lan_ip: Option<IpAddr>,
     pub last_refresh: Instant,
     pub quit: bool,
+    /// Modo demonstração: dados fictícios, ações desativadas (para capturas de tela e testes de interface).
+    pub demo: bool,
+    demo_tick: u64,
 }
 
 const NON_HTTP_PORTS: &[u16] = &[22, 25, 53, 139, 445, 631, 1716, 4369, 5353];
@@ -186,19 +189,68 @@ fn describe(port: u16) -> &'static str {
 
 fn classify(port: u16, name: Option<&str>, image: Option<&str>, has_project: bool) -> Kind {
     const DB_WORDS: &[&str] = &[
-        "postgres", "mysql", "mariadb", "redis", "mongo", "qdrant", "meili", "clickhouse", "valkey", "elasticsearch",
-        "opensearch", "memcached", "neo4j", "cassandra",
+        "postgres",
+        "mysql",
+        "mariadb",
+        "redis",
+        "mongo",
+        "qdrant",
+        "meili",
+        "clickhouse",
+        "valkey",
+        "elasticsearch",
+        "opensearch",
+        "memcached",
+        "neo4j",
+        "cassandra",
     ];
     const DB_PORTS: &[u16] = &[5432, 3306, 33060, 6379, 27017, 6333, 6334, 7700, 9200, 11211, 8123];
     const TOOL_PORTS: &[u16] = &[9229, 5555, 54323, 6006, 8888, 1234, 11434];
     const TOOL_NAMES: &[&str] = &["ollama", "lm-studio", "codium", "cursor", "code", "prisma", "jupyter", "claude"];
     const SYS_NAMES: &[&str] = &[
-        "systemd-resolve", "cupsd", "kdeconnectd", "avahi-daemon", "sshd", "smbd", "nmbd", "tailscaled", "chrome",
-        "chromium", "firefox", "spotify", "dnsmasq", "rpcbind", "cups-browsed", "epmd", "systemd", "NetworkManager",
+        "systemd-resolve",
+        "cupsd",
+        "kdeconnectd",
+        "avahi-daemon",
+        "sshd",
+        "smbd",
+        "nmbd",
+        "tailscaled",
+        "chrome",
+        "chromium",
+        "firefox",
+        "spotify",
+        "dnsmasq",
+        "rpcbind",
+        "cups-browsed",
+        "epmd",
+        "systemd",
+        "NetworkManager",
     ];
     const DEV_NAMES: &[&str] = &[
-        "node", "bun", "deno", "python", "python3", "uvicorn", "gunicorn", "ruby", "php", "go", "java", "beam.smp",
-        "cargo", "air", "next-server", "vite", "esbuild", "dotnet", "dart", "flutter", "npm", "pnpm", "workerd",
+        "node",
+        "bun",
+        "deno",
+        "python",
+        "python3",
+        "uvicorn",
+        "gunicorn",
+        "ruby",
+        "php",
+        "go",
+        "java",
+        "beam.smp",
+        "cargo",
+        "air",
+        "next-server",
+        "vite",
+        "esbuild",
+        "dotnet",
+        "dart",
+        "flutter",
+        "npm",
+        "pnpm",
+        "workerd",
     ];
     let name = name.unwrap_or("");
     if let Some(img) = image {
@@ -208,7 +260,7 @@ fn classify(port: u16, name: Option<&str>, image: Option<&str>, has_project: boo
     if DB_WORDS.iter().any(|w| name.starts_with(w)) || (name.is_empty() && DB_PORTS.contains(&port)) {
         return Kind::Database;
     }
-    if TOOL_PORTS.contains(&port) || TOOL_NAMES.iter().any(|n| name == *n) {
+    if TOOL_PORTS.contains(&port) || TOOL_NAMES.contains(&name) {
         return Kind::Tool;
     }
     if SYS_NAMES.iter().any(|n| name.starts_with(n)) {
@@ -235,9 +287,7 @@ fn lan_ip() -> Option<IpAddr> {
 }
 
 fn in_path(cmd: &str) -> bool {
-    std::env::var_os("PATH")
-        .map(|p| std::env::split_paths(&p).any(|d| d.join(cmd).is_file()))
-        .unwrap_or(false)
+    std::env::var_os("PATH").map(|p| std::env::split_paths(&p).any(|d| d.join(cmd).is_file())).unwrap_or(false)
 }
 
 pub fn spawn_detached(cmd: &str, args: &[&str]) -> bool {
@@ -265,7 +315,19 @@ pub fn open_in_terminal(dir: Option<&std::path::Path>, title: &str, cmd: &[&str]
     if let Ok(t) = std::env::var("TERMINAL") {
         candidates.push(t);
     }
-    for t in ["ghostty", "kitty", "wezterm", "alacritty", "konsole", "gnome-terminal", "kgx", "foot", "xfce4-terminal", "tilix", "xterm"] {
+    for t in [
+        "ghostty",
+        "kitty",
+        "wezterm",
+        "alacritty",
+        "konsole",
+        "gnome-terminal",
+        "kgx",
+        "foot",
+        "xfce4-terminal",
+        "tilix",
+        "xterm",
+    ] {
         candidates.push(t.into());
     }
     let Some(term) = candidates.into_iter().find(|t| in_path(t)) else { return false };
@@ -347,11 +409,16 @@ impl App {
             lan_ip: lan_ip(),
             last_refresh: Instant::now() - Duration::from_secs(1),
             quit: false,
+            demo: false,
+            demo_tick: 0,
         }
     }
 
     // ─── Atualização ────────────────────────────────────────────────────────
     pub fn refresh(&mut self) {
+        if self.demo {
+            return self.refresh_demo();
+        }
         let now = Instant::now();
         let dt = now.duration_since(self.last_refresh).as_secs_f64().max(0.2);
         self.last_refresh = now;
@@ -539,23 +606,28 @@ impl App {
                     View::Docker => e.container.is_some(),
                     View::Exposed => e.exposure.is_exposed(),
                 };
-                in_view && (f.is_empty() || {
-                    let hay = format!(
-                        "{} {} {} {} {}",
-                        e.port,
-                        e.title,
-                        e.stack.as_deref().unwrap_or(""),
-                        e.proc_.as_ref().map(|p| p.cmdline.as_str()).unwrap_or(""),
-                        e.service
-                    )
-                    .to_lowercase();
-                    hay.contains(&f)
-                })
+                in_view
+                    && (f.is_empty() || {
+                        let hay = format!(
+                            "{} {} {} {} {}",
+                            e.port,
+                            e.title,
+                            e.stack.as_deref().unwrap_or(""),
+                            e.proc_.as_ref().map(|p| p.cmdline.as_str()).unwrap_or(""),
+                            e.service
+                        )
+                        .to_lowercase();
+                        hay.contains(&f)
+                    })
             })
             .collect();
         let idx = self
             .sel_key
-            .and_then(|k| self.visible.iter().position(|&i| self.rows[i].key() == k || (self.rows[i].port == k.1 && k.0 == Proto::Tcp)))
+            .and_then(|k| {
+                self.visible
+                    .iter()
+                    .position(|&i| self.rows[i].key() == k || (self.rows[i].port == k.1 && k.0 == Proto::Tcp))
+            })
             .or_else(|| (!self.visible.is_empty()).then(|| self.sel.unwrap_or(0).min(self.visible.len() - 1)));
         self.sel = idx;
         self.sel_key = idx.map(|i| self.rows[self.visible[i]].key());
@@ -635,11 +707,15 @@ impl App {
     }
 
     pub fn open_editor(&mut self) {
+        if self.demo {
+            return self.status("modo demonstração: ações desativadas", Tone::Info);
+        }
         let Some(dir) = self.project_dir() else {
             return self.status("não sei a pasta deste processo", Tone::Warn);
         };
         let d = dir.to_string_lossy().to_string();
-        let gui = ["codium", "cursor", "code", "zed", "subl", "kate", "gnome-text-editor"].into_iter().find(|c| in_path(c));
+        let gui =
+            ["codium", "cursor", "code", "zed", "subl", "kate", "gnome-text-editor"].into_iter().find(|c| in_path(c));
         let (ok, name) = match gui {
             Some(ed) => (spawn_detached(ed, &[&d]), ed.to_string()),
             None => {
@@ -655,6 +731,9 @@ impl App {
     }
 
     pub fn open_terminal(&mut self) {
+        if self.demo {
+            return self.status("modo demonstração: ações desativadas", Tone::Info);
+        }
         let Some(dir) = self.project_dir() else {
             return self.status("não sei a pasta deste processo", Tone::Warn);
         };
@@ -667,6 +746,9 @@ impl App {
     }
 
     pub fn open_logs(&mut self) {
+        if self.demo {
+            return self.status("modo demonstração: ações desativadas", Tone::Info);
+        }
         let Some(name) = self.selected().and_then(|e| e.container.as_ref()).map(|c| c.name.clone()) else {
             return self.status("logs ao vivo só para containers docker", Tone::Warn);
         };
@@ -680,7 +762,10 @@ impl App {
     pub fn ask_kill(&mut self) {
         let Some(e) = self.selected() else { return };
         let (label, target) = if let Some(c) = &e.container {
-            (format!("parar o container {} (:{})", c.name, e.port), KillTarget::Container { id: c.id.clone(), name: c.name.clone() })
+            (
+                format!("parar o container {} (:{})", c.name, e.port),
+                KillTarget::Container { id: c.id.clone(), name: c.name.clone() },
+            )
         } else if let Some(pid) = e.pid {
             let name = e.proc_.as_ref().map(|p| p.name.clone()).unwrap_or_default();
             let proj = e.project.as_ref().map(|p| format!(" · {}", p.name)).unwrap_or_default();
@@ -692,6 +777,9 @@ impl App {
     }
 
     pub fn kill(&mut self, target: KillTarget, label: &str) {
+        if self.demo {
+            return self.status(format!("modo demonstração: não encerrei nada ({label})"), Tone::Info);
+        }
         match target {
             KillTarget::Pid(pid) => {
                 if unsafe { libc::kill(pid, libc::SIGTERM) } != 0 {
@@ -716,5 +804,329 @@ impl App {
 
     pub fn probe_of(&self, e: &Entry) -> Option<Probe> {
         self.prober.get(e.port).map(|(_, p)| p)
+    }
+}
+
+// ─── Modo demonstração ──────────────────────────────────────────────────────
+impl App {
+    fn refresh_demo(&mut self) {
+        use crate::docker::DPort;
+        use std::net::{SocketAddr, SocketAddrV4};
+        self.demo_tick += 1;
+        let t = self.demo_tick as f64;
+        let home = PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/home/dev".into()));
+        self.lan_ip = Some(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 42)));
+        self.fw = Firewall { enabled: true, drop_by_default: true, rules: Some(vec![]) };
+        self.last_refresh = Instant::now();
+
+        let proc_ = |pid: i32, name: &str, cmd: &str, dir: &str, rss_mb: u64, up: u64| ProcInfo {
+            pid,
+            name: name.into(),
+            cmdline: cmd.into(),
+            cwd: Some(home.join(dir)),
+            user: "dev".into(),
+            rss: rss_mb * 1024 * 1024,
+            uptime_secs: up + self.demo_tick,
+            cpu_ticks: 0,
+        };
+        let project = |dir: &str, name: &str, stack: Option<&str>, lang: &'static str, branch: &str| Project {
+            root: home.join(dir),
+            name: name.into(),
+            stack: stack.map(str::to_string),
+            lang,
+            branch: Some(branch.into()),
+        };
+        let container = |name: &str, image: &str, ip: &str, port: u16| Container {
+            id: format!("demo-{name}"),
+            name: name.into(),
+            image: image.into(),
+            status: "Up 2 hours (healthy)".into(),
+            ports: vec![DPort { ip: ip.into(), public: port, private: port, proto: "tcp".into() }],
+        };
+        let wave = |base: f64, amp: f64, speed: f64, phase: f64| {
+            (base + amp * ((t * speed + phase).sin() * 0.6 + (t * speed * 2.7 + phase).cos() * 0.4)).max(0.0)
+        };
+        let lo = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let any = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+
+        // (porta, endereço, pid, processo, projeto, container, conexões, taxa)
+        type Spec = (u16, IpAddr, Option<ProcInfo>, Option<Project>, Option<Container>, usize, f64);
+        let specs: Vec<Spec> = vec![
+            (
+                3000,
+                any,
+                Some(proc_(4211, "next-server", "next-server (v15.1.0)", "dev/acme-web", 612, 5400)),
+                Some(project("dev/acme-web", "acme-web", Some("Next.js"), "TypeScript", "feat/checkout")),
+                None,
+                3,
+                wave(42_000.0, 38_000.0, 0.35, 0.0),
+            ),
+            (
+                3001,
+                lo,
+                Some(proc_(4290, "node", "node --watch dist/main.js", "dev/acme-api", 248, 5300)),
+                Some(project("dev/acme-api", "acme-api", Some("NestJS"), "TypeScript", "main")),
+                None,
+                2,
+                wave(9_000.0, 8_000.0, 0.5, 1.3),
+            ),
+            (
+                5173,
+                lo,
+                Some(proc_(4402, "node", "node node_modules/.bin/vite", "dev/acme-admin", 180, 1900)),
+                Some(project("dev/acme-admin", "acme-admin", Some("Vite"), "TypeScript", "fix/table-sort")),
+                None,
+                1,
+                wave(1_200.0, 1_000.0, 0.8, 2.0),
+            ),
+            (
+                8000,
+                lo,
+                Some(proc_(4517, "uvicorn", "uvicorn app.main:app --reload", "dev/billing", 96, 800)),
+                Some(project("dev/billing", "billing", Some("FastAPI"), "Python", "main")),
+                None,
+                0,
+                0.0,
+            ),
+            (
+                9229,
+                lo,
+                Some(proc_(4211, "next-server", "next-server (v15.1.0)", "dev/acme-web", 612, 5400)),
+                None,
+                None,
+                0,
+                0.0,
+            ),
+            (
+                5555,
+                lo,
+                Some(proc_(4690, "node", "prisma studio", "dev/acme-api", 120, 300)),
+                Some(project("dev/acme-api", "acme-api", Some("NestJS"), "TypeScript", "main")),
+                None,
+                1,
+                wave(300.0, 280.0, 0.9, 0.5),
+            ),
+            (
+                5432,
+                lo,
+                None,
+                None,
+                Some(container("acme-postgres", "postgres:16-alpine", "127.0.0.1", 5432)),
+                4,
+                wave(3_500.0, 3_000.0, 0.5, 1.3),
+            ),
+            (
+                6379,
+                any,
+                None,
+                None,
+                Some(container("acme-redis", "redis:7-alpine", "0.0.0.0", 6379)),
+                1,
+                wave(400.0, 350.0, 0.6, 0.2),
+            ),
+            (
+                7700,
+                lo,
+                None,
+                None,
+                Some(container("acme-search", "getmeili/meilisearch:v1.12", "127.0.0.1", 7700)),
+                0,
+                0.0,
+            ),
+            (53, IpAddr::V4(Ipv4Addr::new(127, 0, 0, 53)), None, None, None, 0, 0.0),
+            (631, lo, None, None, None, 0, 0.0),
+        ];
+
+        let mut rows = vec![];
+        for (port, addr, proc_, project, container, conns, rate) in specs {
+            let scope = collect::scope_of(&addr);
+            let kind = classify(
+                port,
+                proc_.as_ref().map(|p| p.name.as_str()),
+                container.as_ref().map(|c| c.image.as_str()),
+                project.is_some() && port != 9229 && port != 5555,
+            );
+            let service = describe(port);
+            let title = container
+                .as_ref()
+                .map(|c| c.name.clone())
+                .or_else(|| (port != 9229 && port != 5555).then(|| project.as_ref().map(|p| p.name.clone())).flatten())
+                .or_else(|| proc_.as_ref().map(|p| p.name.clone()))
+                .unwrap_or_else(|| "(root)".into());
+            let stack = container
+                .as_ref()
+                .map(|c| docker::short_image(&c.image))
+                .or_else(|| {
+                    (port != 9229 && port != 5555)
+                        .then(|| project.as_ref().map(|p| p.stack.clone().unwrap_or_else(|| p.lang.to_string())))
+                        .flatten()
+                })
+                .or_else(|| (!service.is_empty()).then(|| service.to_string()));
+            let exposure = self.fw.exposure(scope, port, Proto::Tcp, container.is_some());
+            rows.push(Entry {
+                proto: Proto::Tcp,
+                port,
+                addrs: vec![addr],
+                pid: proc_.as_ref().map(|p| p.pid),
+                kind,
+                title,
+                stack,
+                service,
+                proc_,
+                project,
+                container,
+                conns,
+                rate,
+                exposure,
+            });
+        }
+        rows.sort_by_key(|e| (e.kind, e.port, e.proto));
+
+        // conexões fictícias para "clientes" e "fala com"
+        let sa = |ip: [u8; 4], port: u16| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(ip), port));
+        self.conns.clear();
+        self.conn_stats.clear();
+        self.conn_rate.clear();
+        let add = |app: &mut App, local: SocketAddr, remote: SocketAddr, pid: Option<i32>, rx: u64, tx: u64, r: f64| {
+            app.conns.push(Conn { local, remote, pid });
+            app.conn_stats.insert((local, remote), ConnStat { rx, tx, rtt_ms: Some(0.05) });
+            app.conn_rate.insert((local, remote), r);
+        };
+        let k = self.demo_tick;
+        add(
+            self,
+            sa([127, 0, 0, 1], 3000),
+            sa([127, 0, 0, 1], 51734),
+            None,
+            48_000 + k * 900,
+            2_400_000 + k * 40_000,
+            wave(30_000.0, 25_000.0, 0.35, 0.0),
+        );
+        add(
+            self,
+            sa([127, 0, 0, 1], 3000),
+            sa([127, 0, 0, 1], 51740),
+            None,
+            12_000 + k * 300,
+            640_000 + k * 9_000,
+            wave(8_000.0, 7_000.0, 0.35, 1.0),
+        );
+        add(self, sa([192, 168, 0, 17], 3000), sa([192, 168, 0, 23], 60412), None, 3_100, 210_000, 0.0);
+        add(
+            self,
+            sa([127, 0, 0, 1], 3001),
+            sa([127, 0, 0, 1], 51802),
+            Some(4211),
+            9_000 + k * 200,
+            88_000 + k * 3_000,
+            wave(6_000.0, 5_000.0, 0.5, 1.3),
+        );
+        add(self, sa([127, 0, 0, 1], 3001), sa([127, 0, 0, 1], 51806), Some(4211), 4_000, 31_000, 0.0);
+        for (i, port) in [5432u16, 5432, 5432, 6379].into_iter().enumerate() {
+            add(self, sa([127, 0, 0, 1], 41000 + i as u16), sa([127, 0, 0, 1], port), Some(4290), 120_000, 40_000, 0.0);
+        }
+        add(self, sa([192, 168, 0, 17], 41900), sa([3, 18, 12, 63], 443), Some(4290), 18_000, 6_000, 0.0);
+        add(self, sa([127, 0, 0, 1], 41950), sa([127, 0, 0, 1], 3001), Some(4211), 31_000, 4_000, 0.0);
+
+        for e in &rows {
+            let h = self.hist.entry(e.key()).or_default();
+            if h.is_empty() {
+                // pré-preenche o gráfico para a captura já sair bonita
+                for i in 0..90 {
+                    let tt = t - 90.0 + i as f64;
+                    let v = if e.rate > 0.0 { (e.rate * (0.6 + 0.4 * (tt * 0.31).sin().abs())) as u64 } else { 0 };
+                    h.push_back(v);
+                }
+            }
+            h.push_back(e.rate as u64);
+            while h.len() > 120 {
+                h.pop_front();
+            }
+        }
+
+        if self.first {
+            for (opened, text) in [
+                (false, ":4000 tcp  acme-web Next.js"),
+                (true, ":3000 tcp  acme-web Next.js"),
+                (true, ":5173 tcp  acme-admin Vite"),
+                (true, ":8000 tcp  billing FastAPI"),
+            ] {
+                self.push_event(opened, text.into());
+            }
+            for (port, p) in [
+                (
+                    3000u16,
+                    Probe::Http {
+                        status: 200,
+                        reason: "OK".into(),
+                        ms: 38,
+                        ctype: Some("text/html".into()),
+                        server: Some("Next.js".into()),
+                        title: Some("Acme — Checkout".into()),
+                    },
+                ),
+                (
+                    3001,
+                    Probe::Http {
+                        status: 404,
+                        reason: "Not Found".into(),
+                        ms: 4,
+                        ctype: Some("application/json".into()),
+                        server: Some("Express".into()),
+                        title: None,
+                    },
+                ),
+                (
+                    5173,
+                    Probe::Http {
+                        status: 200,
+                        reason: "OK".into(),
+                        ms: 12,
+                        ctype: Some("text/html".into()),
+                        server: None,
+                        title: Some("Acme Admin".into()),
+                    },
+                ),
+                (
+                    8000,
+                    Probe::Http {
+                        status: 200,
+                        reason: "OK".into(),
+                        ms: 9,
+                        ctype: Some("application/json".into()),
+                        server: Some("uvicorn".into()),
+                        title: None,
+                    },
+                ),
+                (
+                    9229,
+                    Probe::Http {
+                        status: 400,
+                        reason: "Bad Request".into(),
+                        ms: 2,
+                        ctype: Some("text/plain".into()),
+                        server: None,
+                        title: None,
+                    },
+                ),
+                (
+                    5555,
+                    Probe::Http {
+                        status: 200,
+                        reason: "OK".into(),
+                        ms: 21,
+                        ctype: Some("text/html".into()),
+                        server: None,
+                        title: Some("Prisma Studio".into()),
+                    },
+                ),
+            ] {
+                self.prober.set(port, p);
+            }
+        }
+        self.first = false;
+        self.known = rows.iter().map(|e| (e.key(), e.title.clone())).collect();
+        self.rows = rows;
+        self.rebuild_visible();
     }
 }

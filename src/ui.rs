@@ -195,7 +195,10 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
     let mut spans = vec![Span::raw(" ")];
     for (i, (v, name)) in VIEWS.iter().enumerate() {
         if *v == app.view {
-            spans.push(Span::styled(format!(" {} {name} ", i + 1), Style::new().fg(CRUST).bg(LAVENDER).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(
+                format!(" {} {name} ", i + 1),
+                Style::new().fg(CRUST).bg(LAVENDER).add_modifier(Modifier::BOLD),
+            ));
         } else {
             spans.push(Span::styled(format!(" {}", i + 1), fg(OVERLAY0)));
             spans.push(Span::styled(format!(" {name} "), fg(SUBTEXT0)));
@@ -246,7 +249,8 @@ fn draw_table(f: &mut Frame, area: Rect, app: &mut App) {
             let e = &app.rows[i];
             let (icon, short, col) = exposure_badge(e.exposure);
             let kind_icon = if e.container.is_some() { I_DOCKER } else { e.kind.icon() };
-            let kind_col = if e.container.is_some() && e.kind != Kind::Database { SAPPHIRE } else { kind_color(e.kind) };
+            let kind_col =
+                if e.container.is_some() && e.kind != Kind::Database { SAPPHIRE } else { kind_color(e.kind) };
             let port_style = if e.proto == Proto::Udp { bold(PINK) } else { bold(PEACH) };
             let title_style = if e.pid.is_none() && e.container.is_none() { fg(OVERLAY0) } else { fg(TEXT) };
             Row::new(vec![
@@ -308,7 +312,16 @@ fn detail_lines(app: &App, e: &Entry, width: usize) -> Vec<Line<'static>> {
             sep(),
             Span::styled(p.user.clone(), fg(SUBTEXT0)),
             sep(),
-            Span::styled(format!("CPU {cpu:.1}%"), fg(if cpu > 50.0 { RED } else if cpu > 10.0 { YELLOW } else { SUBTEXT0 })),
+            Span::styled(
+                format!("CPU {cpu:.1}%"),
+                fg(if cpu > 50.0 {
+                    RED
+                } else if cpu > 10.0 {
+                    YELLOW
+                } else {
+                    SUBTEXT0
+                }),
+            ),
             sep(),
             Span::styled(format!("RAM {}", human_bytes(p.rss as f64)), fg(SUBTEXT0)),
             sep(),
@@ -387,7 +400,10 @@ fn detail_lines(app: &App, e: &Entry, width: usize) -> Vec<Line<'static>> {
                 }
                 l.push(Line::from(spans));
                 if let Some(t) = title {
-                    l.push(Line::from(vec![Span::raw("  "), Span::styled(format!("“{t}”"), Style::new().fg(TEXT).add_modifier(Modifier::ITALIC))]));
+                    l.push(Line::from(vec![
+                        Span::raw("  "),
+                        Span::styled(format!("“{t}”"), Style::new().fg(TEXT).add_modifier(Modifier::ITALIC)),
+                    ]));
                 }
             }
         }
@@ -397,16 +413,21 @@ fn detail_lines(app: &App, e: &Entry, width: usize) -> Vec<Line<'static>> {
     l.push(Line::raw(""));
     let (icon, _, col) = exposure_badge(e.exposure);
     l.push(section("ACESSO", I_LINK));
-    l.push(Line::from(vec![Span::raw("  "), Span::styled(format!("{icon} "), fg(col)), Span::styled(exposure_text(e.exposure), fg(col))]));
-    let addrs: Vec<String> = e.addrs.iter().map(|a| a.to_string()).collect();
-    let mut spans = vec![
+    l.push(Line::from(vec![
         Span::raw("  "),
-        Span::styled(e.url(), Style::new().fg(BLUE).add_modifier(Modifier::UNDERLINED)),
-    ];
+        Span::styled(format!("{icon} "), fg(col)),
+        Span::styled(exposure_text(e.exposure), fg(col)),
+    ]));
+    let addrs: Vec<String> = e.addrs.iter().map(|a| a.to_string()).collect();
+    let mut spans =
+        vec![Span::raw("  "), Span::styled(e.url(), Style::new().fg(BLUE).add_modifier(Modifier::UNDERLINED))];
     if e.exposure.is_exposed() || matches!(e.exposure, Exposure::Blocked | Exposure::BlockedAssumed) {
         if let Some(ip) = app.lan_ip {
             spans.push(Span::raw("   "));
-            spans.push(Span::styled(format!("http://{ip}:{}", e.port), fg(if e.exposure.is_exposed() { YELLOW } else { OVERLAY0 })));
+            spans.push(Span::styled(
+                format!("http://{ip}:{}", e.port),
+                fg(if e.exposure.is_exposed() { YELLOW } else { OVERLAY0 }),
+            ));
         }
     }
     l.push(Line::from(spans));
@@ -442,7 +463,15 @@ fn draw_details(f: &mut Frame, area: Rect, app: &App) {
     let spark_title = Line::from(vec![
         Span::styled(" TRÁFEGO ", bold(MAUVE)),
         Span::styled(format!("agora {}/s", human_bytes(e.rate)), fg(TEAL)),
-        Span::styled(format!("  ·  pico {}/s  ·  {} {} ", human_bytes(peak as f64), e.conns, if e.conns == 1 { "conexão" } else { "conexões" }), fg(OVERLAY1)),
+        Span::styled(
+            format!(
+                "  ·  pico {}/s  ·  {} {} ",
+                human_bytes(peak as f64),
+                e.conns,
+                if e.conns == 1 { "conexão" } else { "conexões" }
+            ),
+            fg(OVERLAY1),
+        ),
     ]);
     let spark = Sparkline::default()
         .block(Block::new().borders(Borders::TOP).border_style(fg(SURFACE1)).title(spark_title))
@@ -491,9 +520,12 @@ fn draw_details(f: &mut Frame, area: Rect, app: &App) {
         }
         if !dest.is_empty() {
             let mut dest: Vec<_> = dest.into_iter().collect();
-            dest.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+            dest.sort_by_key(|d| std::cmp::Reverse(d.1 .0));
             l.push(Line::raw(""));
-            l.push(Line::from(vec![Span::styled(format!("{I_ARROW} "), fg(MAUVE)), Span::styled("FALA COM", bold(MAUVE))]));
+            l.push(Line::from(vec![
+                Span::styled(format!("{I_ARROW} "), fg(MAUVE)),
+                Span::styled("FALA COM", bold(MAUVE)),
+            ]));
             for (addr, (n, port)) in dest.iter().take(6) {
                 let svc = match port {
                     5432 => "postgres",
@@ -522,7 +554,10 @@ fn draw_events(f: &mut Frame, area: Rect, app: &App) {
     let block = panel(Line::styled(" Atividade ", bold(TEXT)), false).padding(Padding::horizontal(1));
     let h = block.inner(area).height as usize;
     let lines: Vec<Line> = if app.events.is_empty() {
-        vec![Line::styled("nenhuma porta abriu ou fechou desde que o monitor começou — suba um `pnpm dev` para ver aparecer aqui", fg(OVERLAY0))]
+        vec![Line::styled(
+            "nenhuma porta abriu ou fechou desde que o monitor começou — suba um `pnpm dev` para ver aparecer aqui",
+            fg(OVERLAY0),
+        )]
     } else {
         app.events
             .iter()
@@ -633,7 +668,10 @@ fn draw_help(f: &mut Frame, area: Rect) {
     text.push(Line::styled("ACESSO", bold(MAUVE)));
     for x in [Exposure::Local, Exposure::Blocked, Exposure::Allowed, Exposure::Docker] {
         let (i, s, c) = exposure_badge(x);
-        text.push(Line::from(vec![Span::styled(format!("{i} {s:<11}"), bold(c)), Span::styled(exposure_text(x), fg(SUBTEXT0))]));
+        text.push(Line::from(vec![
+            Span::styled(format!("{i} {s:<11}"), bold(c)),
+            Span::styled(exposure_text(x), fg(SUBTEXT0)),
+        ]));
     }
     text.push(Line::raw(""));
     text.push(Line::styled("qualquer tecla fecha", fg(OVERLAY0)).centered());

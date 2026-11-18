@@ -91,10 +91,7 @@ pub fn load_users() -> HashMap<u32, String> {
 }
 
 fn system_uptime() -> f64 {
-    std::fs::read_to_string("/proc/uptime")
-        .ok()
-        .and_then(|s| s.split_whitespace().next()?.parse().ok())
-        .unwrap_or(0.0)
+    std::fs::read_to_string("/proc/uptime").ok().and_then(|s| s.split_whitespace().next()?.parse().ok()).unwrap_or(0.0)
 }
 
 pub fn snapshot(with_udp: bool, users: &HashMap<u32, String>) -> Snapshot {
@@ -176,11 +173,7 @@ pub fn snapshot(with_udp: bool, users: &HashMap<u32, String>) -> Snapshot {
         let Some(p) = handles.get(&pid) else { continue };
         let Ok(st) = p.stat() else { continue };
         let cmdline = p.cmdline().map(|v| v.join(" ")).unwrap_or_default();
-        let user = p
-            .uid()
-            .ok()
-            .map(|u| users.get(&u).cloned().unwrap_or_else(|| u.to_string()))
-            .unwrap_or_default();
+        let user = p.uid().ok().map(|u| users.get(&u).cloned().unwrap_or_else(|| u.to_string())).unwrap_or_default();
         // o kernel corta o "comm" em 15 caracteres ("next-server (v1"): usa o nome do comando
         let name = if st.comm.len() >= 15 {
             cmdline

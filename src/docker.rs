@@ -76,10 +76,7 @@ pub fn list() -> Vec<Container> {
 }
 
 pub fn stop(id: &str) -> bool {
-    matches!(
-        request("POST", &format!("/containers/{id}/stop"), Duration::from_secs(20)),
-        Some((204 | 304, _))
-    )
+    matches!(request("POST", &format!("/containers/{id}/stop"), Duration::from_secs(20)), Some((204 | 304, _)))
 }
 
 /// "ghcr.io/org/postgres:15-alpine" -> "postgres:15-alpine"

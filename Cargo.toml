@@ -1,6 +1,6 @@
 [package]
 name = "portkyu"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 description = "Monitor de portas para devs: processos, projetos, containers, tráfego e firewall"
 license = "MIT"
@@ -17,6 +17,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 libc = "0.2"
 eframe = "0.37"
 egui_extras = "0.37"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [profile.release]
 opt-level = 3

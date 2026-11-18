@@ -10,8 +10,8 @@ use crate::theme::{
 };
 use crate::ui::human_bytes;
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Frame, Id, Key,
-    Layout, Margin, Pos2, RichText, Sense, Shape, Stroke, TextStyle, Vec2,
+    self, Align, Align2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Frame, Id, Key, Layout,
+    Margin, Pos2, RichText, Sense, Shape, Stroke, TextStyle, Vec2,
 };
 use egui_extras::{Column, TableBuilder};
 use std::process::Command;
@@ -166,6 +166,8 @@ enum Act {
 
 pub struct Gui {
     app: App,
+    /// PORTKYU_SCREENSHOT=arquivo.png: salva uma captura da própria janela e fecha (docs/README)
+    shot: Option<(String, std::time::Instant, bool)>,
     search_id: Id,
     focus_search: bool,
     scroll_to_sel: bool,
@@ -294,7 +296,8 @@ pub fn run(mut app: App) -> eframe::Result<()> {
         Box::new(move |cc| {
             setup_fonts(&cc.egui_ctx);
             setup_style(&cc.egui_ctx);
-            Ok(Box::new(Gui { app, search_id: Id::new("busca"), focus_search: false, scroll_to_sel: true }))
+            let shot = std::env::var("PORTKYU_SCREENSHOT").ok().map(|p| (p, std::time::Instant::now(), false));
+            Ok(Box::new(Gui { app, shot, search_id: Id::new("busca"), focus_search: false, scroll_to_sel: false }))
         }),
     )
 }
@@ -314,12 +317,9 @@ fn pill(ui: &mut egui::Ui, text: impl Into<String>, color: Color32, filled: bool
 }
 
 fn card(ui: &mut egui::Ui, title: &str, icon: &str, add: impl FnOnce(&mut egui::Ui)) {
-    Frame::new()
-        .fill(BASE)
-        .stroke(Stroke::new(1.0, SURFACE0))
-        .corner_radius(12)
-        .inner_margin(Margin::same(14))
-        .show(ui, |ui| {
+    Frame::new().fill(BASE).stroke(Stroke::new(1.0, SURFACE0)).corner_radius(12).inner_margin(Margin::same(14)).show(
+        ui,
+        |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(RichText::new(icon).color(MAUVE).size(13.0));
@@ -327,7 +327,8 @@ fn card(ui: &mut egui::Ui, title: &str, icon: &str, add: impl FnOnce(&mut egui::
             });
             ui.add_space(6.0);
             add(ui);
-        });
+        },
+    );
     ui.add_space(10.0);
 }
 
@@ -353,7 +354,10 @@ fn traffic_chart(ui: &mut egui::Ui, data: &[u64], color: Color32) {
     p.rect_filled(rect, 10, CRUST);
     for i in 1..4 {
         let y = rect.top() + rect.height() * i as f32 / 4.0;
-        p.line_segment([Pos2::new(rect.left() + 8.0, y), Pos2::new(rect.right() - 8.0, y)], Stroke::new(1.0, tint(SURFACE0, 160)));
+        p.line_segment(
+            [Pos2::new(rect.left() + 8.0, y), Pos2::new(rect.right() - 8.0, y)],
+            Stroke::new(1.0, tint(SURFACE0, 160)),
+        );
     }
     if data.len() < 2 {
         p.text(rect.center(), Align2::CENTER_CENTER, "coletando…", FontId::proportional(12.0), OVERLAY0);
@@ -397,6 +401,7 @@ impl eframe::App for Gui {
             self.app.refresh();
         }
         ui.ctx().request_repaint_after(Duration::from_millis(300));
+        self.auto_screenshot(ui.ctx());
         let mut acts: Vec<Act> = vec![];
         self.keyboard(ui.ctx(), &mut acts);
 
@@ -433,6 +438,30 @@ impl eframe::App for Gui {
 }
 
 impl Gui {
+    fn auto_screenshot(&mut self, ctx: &egui::Context) {
+        let Some((path, start, sent)) = &mut self.shot else { return };
+        if start.elapsed() < Duration::from_millis(1500) {
+            // tamanho fixo para capturas consistentes, mesmo se o gerenciador de janelas lembrar "maximizado"
+            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(1400.0, 880.0)));
+        }
+        if !*sent && start.elapsed() > Duration::from_secs(6) {
+            *sent = true;
+            let path = path.clone();
+            ctx.request_screenshot(move |img| {
+                let [w, h] = img.size;
+                let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_srgba_unmultiplied()).collect();
+                match image::RgbaImage::from_raw(w as u32, h as u32, bytes).map(|i| i.save(&path)) {
+                    Some(Ok(())) => eprintln!("captura salva em {path}"),
+                    other => eprintln!("falha ao salvar captura: {other:?}"),
+                }
+            });
+        }
+        if *sent && start.elapsed() > Duration::from_secs(8) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+
     fn apply(&mut self, a: Act, ctx: &egui::Context) {
         let app = &mut self.app;
         match a {
@@ -466,7 +495,6 @@ impl Gui {
             Act::View(v) => {
                 app.view = v;
                 app.rebuild_visible();
-                self.scroll_to_sel = true;
             }
             Act::ToggleUdp => {
                 app.show_udp = !app.show_udp;
@@ -619,23 +647,30 @@ impl Gui {
                 .fill(if active { color } else { tint(color, 24) })
                 .stroke(Stroke::new(1.0, tint(color, if active { 255 } else { 60 })))
                 .corner_radius(15);
-                let r = ui.add(btn).on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(format!("mostrar só {label}"));
+                let r = ui
+                    .add(btn)
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(format!("mostrar só {label}"));
                 if r.clicked() {
                     acts.push(Act::View(if active { View::All } else { view }));
                 }
             }
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new(chrono::Local::now().format("%H:%M:%S").to_string()).monospace().color(SUBTEXT0));
+                ui.label(
+                    RichText::new(chrono::Local::now().format("%H:%M:%S").to_string()).monospace().color(SUBTEXT0),
+                );
                 ui.label(RichText::new(I_CLOCK).color(OVERLAY0));
                 ui.add_space(10.0);
                 if let Some(ip) = self.app.lan_ip {
-                    ui.label(RichText::new(ip.to_string()).monospace().color(OVERLAY1)).on_hover_text("IP desta máquina na rede local");
+                    ui.label(RichText::new(ip.to_string()).monospace().color(OVERLAY1))
+                        .on_hover_text("IP desta máquina na rede local");
                     ui.label(RichText::new(I_GLOBE).color(OVERLAY0));
                     ui.add_space(10.0);
                 }
                 if self.app.fw.enabled {
-                    pill(ui, format!("{I_SHIELD}  ufw ativo"), GREEN, false).on_hover_text("firewall ligado, bloqueando conexões de entrada");
+                    pill(ui, format!("{I_SHIELD}  ufw ativo"), GREEN, false)
+                        .on_hover_text("firewall ligado, bloqueando conexões de entrada");
                 } else {
                     pill(ui, format!("{I_WARN}  ufw desligado"), RED, true);
                 }
@@ -643,13 +678,15 @@ impl Gui {
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut self.app.filter)
                         .id(self.search_id)
-                        .hint_text(RichText::new(format!("{I_SEARCH}   Buscar porta, projeto, stack…   ( / )")).color(OVERLAY0))
+                        .hint_text(
+                            RichText::new(format!("{I_SEARCH}   Buscar porta, projeto, stack…   ( / )"))
+                                .color(OVERLAY0),
+                        )
                         .desired_width(320.0)
                         .margin(Margin::symmetric(10, 6)),
                 );
                 if r.changed() {
                     self.app.rebuild_visible();
-                    self.scroll_to_sel = true;
                 }
                 if self.focus_search {
                     r.request_focus();
@@ -694,15 +731,27 @@ impl Gui {
                 });
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add(egui::Button::new(RichText::new(format!("{I_KEY}  Atalhos")).size(13.0)).corner_radius(8)).on_hover_text("F1 ou ?").clicked() {
+                if ui
+                    .add(egui::Button::new(RichText::new(format!("{I_KEY}  Atalhos")).size(13.0)).corner_radius(8))
+                    .on_hover_text("F1 ou ?")
+                    .clicked()
+                {
                     acts.push(Act::Help);
                 }
                 let mut udp = self.app.show_udp;
-                if ui.checkbox(&mut udp, RichText::new("incluir UDP").size(13.0).color(SUBTEXT0)).on_hover_text("tecla U").changed() {
+                if ui
+                    .checkbox(&mut udp, RichText::new("incluir UDP").size(13.0).color(SUBTEXT0))
+                    .on_hover_text("tecla U")
+                    .changed()
+                {
                     acts.push(Act::ToggleUdp);
                 }
                 ui.add_space(8.0);
-                ui.label(RichText::new(format!("{} portas · atualiza a cada 1s", self.app.rows.len())).size(12.5).color(OVERLAY0));
+                ui.label(
+                    RichText::new(format!("{} portas · atualiza a cada 1s", self.app.rows.len()))
+                        .size(12.5)
+                        .color(OVERLAY0),
+                );
             });
         });
     }
@@ -712,9 +761,13 @@ impl Gui {
         if app.visible.is_empty() {
             ui.centered_and_justified(|ui| {
                 ui.label(
-                    RichText::new(if app.filter.is_empty() { "Nenhuma porta nesta visão" } else { "Nada encontrado para a busca" })
-                        .size(16.0)
-                        .color(OVERLAY0),
+                    RichText::new(if app.filter.is_empty() {
+                        "Nenhuma porta nesta visão"
+                    } else {
+                        "Nada encontrado para a busca"
+                    })
+                    .size(16.0)
+                    .color(OVERLAY0),
                 );
             });
             return;
@@ -794,7 +847,11 @@ impl Gui {
                         }
                     });
                     row.col(|ui| {
-                        ui.label(RichText::new(rate(e.rate)).monospace().color(if e.rate >= 1.0 { TEAL } else { SURFACE2 }));
+                        ui.label(RichText::new(rate(e.rate)).monospace().color(if e.rate >= 1.0 {
+                            TEAL
+                        } else {
+                            SURFACE2
+                        }));
                     });
                     row.col(|ui| {
                         let (icon, short, c, tip) = exposure_badge(e.exposure);
@@ -835,7 +892,13 @@ impl Gui {
                         }
                         item(ui, I_REDO, "Testar HTTP", "R", Act::Probe);
                         ui.separator();
-                        item(ui, I_STOP, if is_docker { "Parar container" } else { "Encerrar processo" }, "Del", Act::AskKill);
+                        item(
+                            ui,
+                            I_STOP,
+                            if is_docker { "Parar container" } else { "Encerrar processo" },
+                            "Del",
+                            Act::AskKill,
+                        );
                     });
                 });
             }
@@ -1094,7 +1157,7 @@ impl Gui {
                 }
                 if !dest.is_empty() {
                     let mut dest: Vec<_> = dest.into_iter().collect();
-                    dest.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+                    dest.sort_by_key(|d| std::cmp::Reverse(d.1 .0));
                     card(ui, "FALA COM", I_ARROW, |ui| {
                         egui::Grid::new("destinos").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
                             for (addr, (n, port)) in dest.iter().take(10) {
@@ -1129,7 +1192,10 @@ impl Gui {
         ui.add_space(4.0);
         egui::ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
             if self.app.events.is_empty() {
-                ui.label(RichText::new("Nada ainda — suba um `pnpm dev` ou um container e ele aparece aqui.").color(OVERLAY0));
+                ui.label(
+                    RichText::new("Nada ainda — suba um `pnpm dev` ou um container e ele aparece aqui.")
+                        .color(OVERLAY0),
+                );
             }
             for ev in &self.app.events {
                 ui.horizontal(|ui| {
@@ -1180,7 +1246,9 @@ impl Gui {
     }
 
     fn modals(&mut self, ctx: &egui::Context, acts: &mut Vec<Act>) {
-        let frame = |c: Color32| Frame::new().fill(MANTLE).stroke(Stroke::new(1.0, c)).corner_radius(16).inner_margin(Margin::same(24));
+        let frame = |c: Color32| {
+            Frame::new().fill(MANTLE).stroke(Stroke::new(1.0, c)).corner_radius(16).inner_margin(Margin::same(24))
+        };
         match &self.app.modal {
             Modal::None => {}
             Modal::Confirm { label, .. } => {
@@ -1197,14 +1265,19 @@ impl Gui {
                     ui.add(egui::Label::new(RichText::new(format!("{cap}?")).size(15.0)).wrap());
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        let b = egui::Button::new(RichText::new(format!("{I_STOP}  Encerrar")).color(CRUST).font(bold(14.0)))
-                            .fill(RED)
-                            .corner_radius(9)
-                            .min_size(Vec2::new(120.0, 34.0));
+                        let b = egui::Button::new(
+                            RichText::new(format!("{I_STOP}  Encerrar")).color(CRUST).font(bold(14.0)),
+                        )
+                        .fill(RED)
+                        .corner_radius(9)
+                        .min_size(Vec2::new(120.0, 34.0));
                         if ui.add(b).clicked() {
                             acts.push(Act::ConfirmKill);
                         }
-                        if ui.add(egui::Button::new("Cancelar").corner_radius(9).min_size(Vec2::new(100.0, 34.0))).clicked() {
+                        if ui
+                            .add(egui::Button::new("Cancelar").corner_radius(9).min_size(Vec2::new(100.0, 34.0)))
+                            .clicked()
+                        {
                             acts.push(Act::CloseModal);
                         }
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

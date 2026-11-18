@@ -11,10 +11,19 @@
 </p>
 
 <p align="center">
+  🇧🇷 Português · <a href="README.en.md">🇺🇸 English</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/RafaelProfMgz/portkyu/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/RafaelProfMgz/portkyu?color=cba6f7"></a>
   <img alt="linux" src="https://img.shields.io/badge/plataforma-Linux-89b4fa">
   <img alt="rust" src="https://img.shields.io/badge/feito%20com-Rust-fab387">
   <a href="LICENSE"><img alt="licença" src="https://img.shields.io/badge/licen%C3%A7a-MIT-a6e3a1"></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="PortKyu mostrando servidores dev, bancos e containers" width="900">
+  <br><sub>Captura com dados fictícios (<code>portkyu --demo</code>).</sub>
 </p>
 
 ---
@@ -97,6 +106,7 @@ portkyu --tui        versão de terminal (útil via ssh ou com sudo)
 portkyu -l           lista uma vez e sai (bom para grep/scripts)
 portkyu -u           inclui portas UDP
 portkyu --admin      abre um terminal rodando a versão de terminal como root
+portkyu --demo       dados fictícios — para conhecer a interface ou tirar capturas
 sudo portkyu --tui   mostra processos de root e as regras exatas do ufw
 ```
 
@@ -141,9 +151,17 @@ Ou, para todos os containers, em `/etc/docker/daemon.json`: `{ "ip": "127.0.0.1"
 
 ---
 
+## Contribuindo
+
+O PortKyu é open source e contribuições são muito bem-vindas — de relatos de bug a novos recursos.
+Leia o **[guia de contribuição](CONTRIBUTING.md)**, veja as
+[issues `good first issue`](https://github.com/RafaelProfMgz/portkyu/labels/good%20first%20issue) e participe das
+[Discussions](https://github.com/RafaelProfMgz/portkyu/discussions). Vulnerabilidades: veja [SECURITY.md](SECURITY.md).
+
 ## Desenvolvimento
 
 ```bash
+cargo run --release -- --demo  # interface com dados fictícios
 cargo run --release            # interface gráfica
 cargo run --release -- --tui   # interface de terminal
 ./scripts/build-appimage.sh    # gera dist/*.AppImage e dist/*.tar.gz
