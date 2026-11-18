@@ -83,7 +83,10 @@ fn main() {
 }
 
 fn print_list(app: &App) {
-    println!("{:<5} {:<6} {:<24} {:<20} {:<6} {:<11} PROJETO", "PROTO", "PORTA", "SERVIÇO", "STACK", "CONEX", "ACESSO");
+    use std::io::Write;
+    // escreve com tratamento de erro: `portkyu -l | head` fecha o pipe e não deve gerar panic
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{:<5} {:<6} {:<24} {:<20} {:<6} {:<11} PROJETO", "PROTO", "PORTA", "SERVIÇO", "STACK", "CONEX", "ACESSO");
     for e in &app.rows {
         let (_, short, _) = ui::exposure_badge(e.exposure);
         let dir = e
@@ -92,7 +95,8 @@ fn print_list(app: &App) {
             .map(|p| p.root.display().to_string())
             .or_else(|| e.proc_.as_ref().and_then(|p| p.cwd.as_ref()).map(|c| c.display().to_string()))
             .unwrap_or_default();
-        println!(
+        if writeln!(
+            out,
             "{:<5} {:<6} {:<24} {:<20} {:<6} {:<11} {}",
             e.proto.as_str(),
             e.port,
@@ -101,7 +105,11 @@ fn print_list(app: &App) {
             e.conns,
             short,
             dir
-        );
+        )
+        .is_err()
+        {
+            return;
+        }
     }
 }
 
