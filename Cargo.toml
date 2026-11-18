@@ -1,0 +1,25 @@
+[package]
+name = "portkyu"
+version = "1.0.0"
+edition = "2021"
+description = "Monitor de portas para devs: processos, projetos, containers, tráfego e firewall"
+license = "MIT"
+repository = "https://github.com/RafaelProfMgz/portkyu"
+readme = "README.md"
+keywords = ["ports", "network", "docker", "devtools", "monitor"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+ratatui = "0.30"
+procfs = "0.18"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+libc = "0.2"
+eframe = "0.37"
+egui_extras = "0.37"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

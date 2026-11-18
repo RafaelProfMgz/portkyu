@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=PortKyu
+GenericName=Monitor de portas
+Comment=Portas abertas, projetos, containers, tráfego e firewall em tempo real
+Exec=portkyu
+Icon=portkyu
+Terminal=false
+Categories=Development;
+Keywords=port;porta;network;rede;netstat;lsof;docker;dev;
+StartupWMClass=portkyu
+StartupNotify=true
+X-KDE-Shortcuts=Meta+Shift+P
+Actions=admin;
+
+[Desktop Action admin]
+Name=Abrir como administrador (terminal)
+Exec=portkyu --admin
